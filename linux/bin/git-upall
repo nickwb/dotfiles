@@ -1,0 +1,18 @@
+#!/usr/bin/bash
+
+if [ "$1" == "one" ]; then
+    pwd;
+	git fetch --prune origin;
+	BRANCH=`git symbolic-ref --short -q HEAD`;
+	if [ "$BRANCH" == "master" ]; then
+		git merge origin/master --ff-only;
+	else
+		echo "Won't update. Branch is $BRANCH";
+	fi;
+
+    exit 0;
+fi;
+
+# Recursively list out all repositories under the current directory which are "dirty".
+# (unstaged changes, not on master, etc.)
+each-child-repo.sh 'git-upall one';

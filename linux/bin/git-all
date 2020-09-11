@@ -1,0 +1,4 @@
+#!/usr/bin/sh
+
+# Recursively show the status of all repositories under the current directory
+each-child-repo.sh 'pwd; git branch; git status -s'

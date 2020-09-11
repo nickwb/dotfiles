@@ -1,0 +1,21 @@
+#!/usr/bin/bash
+
+if [ "$1" == "one" ]; then
+    BRANCH=`git symbolic-ref --short -q HEAD`;
+	REPONAME=`pwd`;
+	
+	if [[ -n $(git status -s) ]]; then
+		echo "$REPONAME has uncomitted changes on branch: $BRANCH.";
+		git status -s;
+	else
+		if [ "$BRANCH" != "master" ]; then
+			echo "$REPONAME is on branch: $BRANCH."
+		fi;
+	fi;
+
+    exit 0;
+fi;
+
+# Recursively list out all repositories under the current directory which are "dirty".
+# (unstaged changes, not on master, etc.)
+each-child-repo.sh 'git-dirty one';

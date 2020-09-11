@@ -7,7 +7,7 @@ BRANCH=`git symbolic-ref --short -q HEAD`;
 
 if [ $? -ne 0 ]; then
     exit 1;
-fi
+fi;
 
 if [ "$BRANCH" == "master" ]; then
     echo "You're on master. You shouldn't publish this.";
