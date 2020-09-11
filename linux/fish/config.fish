@@ -1,8 +1,8 @@
-set fish_cfg_root (dirname (status --current-filename))
+set -x dotfiles_root (realpath (dirname (status --current-filename))/../)
 
 starship init fish | source
 
-source $fish_cfg_root/git.fish
-source $fish_cfg_root/aliases.fish
-source $fish_cfg_root/nix.fish
+source $dotfiles_root/fish/git.fish
+source $dotfiles_root/fish/aliases.fish
+source $dotfiles_root/fish/nix.fish
 
