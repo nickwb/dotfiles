@@ -1,0 +1,23 @@
+#!/usr/bin/bash
+
+# Push a branch to origin and set upstream tracking.
+# Will abort if you're on master. You should be publishing a feature branch.
+# Warns you if there are uncommitted changes - but does not abort.
+BRANCH=`git symbolic-ref --short -q HEAD`;
+
+if [ $? -ne 0 ]; then
+    exit 1;
+fi
+
+if [ "$BRANCH" == "master" ]; then
+    echo "You're on master. You shouldn't publish this.";
+    exit 1;
+fi;
+
+if [[ -n $(git status -s) ]]; then
+    echo "WARNING: You have uncommitted changes or a dirty working tree.";
+    echo "WARNING: I'm not telling you what to do, but maybe you forgot to commit?"
+fi;
+
+echo "Publishing an upstream branch for $BRANCH.";
+git push -u origin $BRANCH;
