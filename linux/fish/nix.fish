@@ -1,33 +1,45 @@
 #! /usr/local/bin/fish
-if test  -n "$HOME" ;
+if test -n "$HOME";
+    # Set up the per-user profile.
+    # This part should be kept in sync with nixpkgs:nixos/modules/programs/shell.nix
     set -xg NIX_LINK "$HOME/.nix-profile"
 
-    # Set the default profile.
-    if not test -L "$NIX_LINK" ;
-        echo "creating $NIX_LINK" >&2
-        set -l _NIX_DEF_LINK /nix/var/nix/profiles/default
-        /nix/store/cdybb3hbbxf6k84c165075y7vkv24vm2-coreutils-8.23/bin/ln -s "$_NIX_DEF_LINK" "$NIX_LINK"
-    end
+    # Append ~/.nix-defexpr/channels to $NIX_PATH so that <nixpkgs>
+    # paths work when the user has fetched the Nixpkgs channel.
+    set -xg NIX_PATH $HOME/.nix-defexpr/channels $NIX_PATH
 
-    set -xg PATH $NIX_LINK/bin $NIX_LINK/sbin $PATH
-
-    # Subscribe the user to the Nixpkgs channel by default.
-    if not test -e $HOME/.nix-channels ;
-        echo "https://nixos.org/channels/nixpkgs-unstable nixpkgs" > $HOME/.nix-channels
-    end
-
-    # Append ~/.nix-defexpr/channels/nixpkgs to $NIX_PATH so that
-    # <nixpkgs> paths work when the user has fetched the Nixpkgs
-    # channel.
-    # set -xg  NIX_PATH ${NIX_PATH:+$NIX_PATH:}nixpkgs=$HOME/.nix-defexpr/channels/nixpkgs
-    set -xg  NIX_PATH $NIX_PATH $HOME/.nix-defexpr/channels/nixpkgs
+    # Set up environment.
+    # This part should be kept in sync with nixpkgs:nixos/modules/programs/environment.nix
+    set -xg NIX_PROFILES "/nix/var/nix/profiles/default $HOME/.nix-profile"
 
     # Set $SSL_CERT_FILE so that Nixpkgs applications like curl work.
-    if test  -e /etc/ssl/certs/ca-bundle.crt ;  # Fedora, NixOS
-        set -xg SSL_CERT_FILE /etc/ssl/certs/ca-bundle.crt ;
-    else if test -e /etc/ssl/certs/ca-certificates.crt ;  # Ubuntu, Debian
+    if test  -e /etc/ssl/certs/ca-bundle.crt;  # Fedora, NixOS
+        set -xg SSL_CERT_FILE /etc/ssl/certs/ca-bundle.crt;
+    else if test -e /etc/ssl/certs/ca-certificates.crt;  # Ubuntu, Debian
         set -xg SSL_CERT_FILE /etc/ssl/certs/ca-certificates.crt
-    else if test -e "$NIX_LINK/etc/ca-bundle.crt" ;  # fall back to Nix profile
+    else if test -e "$NIX_LINK/etc/ca-bundle.crt"   # fall back to Nix profile
         set -xg SSL_CERT_FILE "$NIX_LINK/etc/ca-bundle.crt"
     end
+
+    # Set $NIX_SSL_CERT_FILE so that Nixpkgs applications like curl work.
+    if test -e /etc/ssl/certs/ca-certificates.crt; # NixOS, Ubuntu, Debian, Gentoo, Arch
+        set -xg NIX_SSL_CERT_FILE /etc/ssl/certs/ca-certificates.crt
+    else if test -e /etc/ssl/ca-bundle.pem; # openSUSE Tumbleweed
+        set -xg NIX_SSL_CERT_FILE /etc/ssl/ca-bundle.pem
+    else if test -e /etc/ssl/certs/ca-bundle.crt; # Old NixOS
+        set -xg NIX_SSL_CERT_FILE /etc/ssl/certs/ca-bundle.crt
+    else if test -e /etc/pki/tls/certs/ca-bundle.crt; # Fedora, CentOS
+        set -xg NIX_SSL_CERT_FILE /etc/pki/tls/certs/ca-bundle.crt
+    else if test -e "$NIX_LINK/etc/ssl/certs/ca-bundle.crt"; # fall back to cacert in Nix profile
+        set -xg NIX_SSL_CERT_FILE "$NIX_LINK/etc/ssl/certs/ca-bundle.crt"
+    else if test -e "$NIX_LINK/etc/ca-bundle.crt"; # old cacert in Nix profile
+        set -xg NIX_SSL_CERT_FILE "$NIX_LINK/etc/ca-bundle.crt"
+    end
+
+    if test -n "$MANPATH";
+        set -xg MANPATH "$NIX_LINK/share/man" $MANPATH;
+    end
+
+    set -xg PATH $NIX_LINK/bin $PATH;
+    set --erase NIX_LINK;
 end
