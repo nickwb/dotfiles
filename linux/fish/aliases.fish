@@ -1,5 +1,5 @@
 alias cat='bat --theme=OneHalfDark'
 alias ls='exa'
 alias dockaudio='$dotfiles_root/xps/set-dock-audio.sh'
-alias nsh='nix-shell'
+alias nsh='nix-shell --command fish'
 alias fuu='killall -9 rider'
