@@ -1,7 +1,3 @@
-alias text="open -a TextEdit"
-
-alias fuu="killall -9 rider"
-alias soundup='sudo pkill coreaudiod'
 
 function past() {
     local run_cmd=`history -w /dev/stdout | fzf`
@@ -13,14 +9,6 @@ function past() {
         eval $run_cmd;
     fi
 }
-
-alias nsh=nix-shell
-
-alias fcd='cd $(fd -t d | fzf)'
-alias cat='bat --theme=OneHalfDark';
-alias ls='exa';
-
-alias top='top -o cpu';
 
 # nvm
 function nvmup() {

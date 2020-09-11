@@ -1,0 +1,38 @@
+[user]
+    name = Nick Young
+    email = nick.young@stacktracehq.com
+[branch]
+    autosetuprebase = always
+[core]
+    editor = vim
+[alias]
+    ld = log --decorate
+    ql = log --pretty=format:%C(yellow)%h\\ %ad%Cred%d\\ %Creset%s%Cblue\\ [%cn] --decorate --date=short -n 10
+    ll = log --pretty=format:%C(yellow)%h\\ %ad%Cred%d\\ %Creset%s%Cblue\\ [%cn] --decorate --date=short HEAD -n 1
+    lg = log --all --decorate --graph --pretty=format:%C(yellow)%h\\ %ad%Cred%d\\ %Creset%s%Cblue\\ [%cn] --decorate --date=short
+    st = status -s
+    co = checkout
+    mt = mergetool
+    dt = difftool
+    ds = diff --shortstat
+    ddiff = difftool --dir-diff
+    cundo = reset --soft HEAD~1
+    nuke = !git reset . && git checkout . && git clean -fd
+    fro = !git fetch -p origin && git rebase origin/master
+    rtest = rebase --exec bin/test
+    fp = push --force-with-lease
+[rebase]
+    autosquash = true
+[diff]
+    tool = bc4
+    guitool = bc4
+[merge]
+    tool = bc4
+[mergetool "bc4"]
+    cmd = "/usr/bin/bcompare" \"$LOCAL\" \"$REMOTE\" \"$BASE\" \"$MERGED\"
+    trustExitCode = true
+[filter "lfs"]
+    clean = git-lfs clean -- %f
+    smudge = git-lfs smudge -- %f
+    process = git-lfs filter-process
+    required = true
