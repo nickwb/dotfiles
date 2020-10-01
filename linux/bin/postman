@@ -1,0 +1,10 @@
+#!/usr/bin/bash
+
+POSTMAN_BIN="$HOME/tools/Postman/app/Postman"
+
+if [ ! -f $POSTMAN_BIN ]; then
+    echo "Expected postman binary at: $POSTMAN_BIN";
+    exit 1;
+fi
+
+nohup $POSTMAN_BIN > /dev/null 2> /dev/null &
