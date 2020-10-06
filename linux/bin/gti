@@ -1,0 +1,6 @@
+#!/bin/sh
+
+echo "Assuming you meant 'git' when you typed 'gti'..."
+echo ""
+
+git $*
