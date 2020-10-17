@@ -20,17 +20,19 @@ if [[ -n "$DIR_GIT_STATUS" ]]; then
 fi;
 
 BRANCH=`git symbolic-ref --short -q HEAD`;
-if [ "$BRANCH" != "master" ]; then
+MAIN_BRANCH=`git mbr`;
+
+if [ "$BRANCH" != "$MAIN_BRANCH" ]; then
 	echo "Pulling remote changes...";
 	git fetch --prune origin;
 	HEADREV=`git rev-parse HEAD`;
-	BASEREV=`git merge-base HEAD origin/master`;
+	BASEREV=`git merge-base HEAD origin/$MAIN_BRANCH`;
 
 	if [ "$HEADREV" == "$BASEREV" ]; then
-		echo "Great; $BRANCH is on master. Unwinding...";
+		echo "Great; $BRANCH is on $MAIN_BRANCH. Unwinding...";
 		CONTINUE=1;
 	else
-		echo "$BRANCH is ahead of master.";
+		echo "$BRANCH is ahead of $MAIN_BRANCH.";
 		CONTINUE=0;
 	fi;
 
@@ -40,19 +42,19 @@ if [ "$BRANCH" != "master" ]; then
 	fi;
 
 	if [ $CONTINUE -eq 1 ]; then
-		git checkout master;
-		git merge origin/master --ff-only;
+		git checkout $MAIN_BRANCH;
+		git merge origin/$MAIN_BRANCH --ff-only;
 		git branch -D $BRANCH;
 		echo ""
 		echo "Unwind complete. Deleted: $BRANCH."
 		echo "Here's what you missed:"
 		echo ""
-		git log --oneline $HEADREV~1..master
+		git log --oneline $HEADREV~1..$MAIN_BRANCH
 	else
 		echo "Aborting. You can force with gitunwind -f."
 	fi;
 else
-	echo "You're on master. Nothing to unwind!";
+	echo "You're on $MAIN_BRANCH. Nothing to unwind!";
 	echo "Will update instead.";
 	git pull --prune;
 fi;

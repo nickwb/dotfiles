@@ -3,12 +3,13 @@
 if [ "$1" == "one" ]; then
     BRANCH=`git symbolic-ref --short -q HEAD`;
 	REPONAME=`pwd`;
+	MAIN_BRANCH=`git mbr`;
 	
 	if [[ -n $(git status -s) ]]; then
 		echo "$REPONAME has uncomitted changes on branch: $BRANCH.";
 		git status -s;
 	else
-		if [ "$BRANCH" != "master" ]; then
+		if [ "$BRANCH" != "$MAIN_BRANCH" ]; then
 			echo "$REPONAME is on branch: $BRANCH."
 		fi;
 	fi;
@@ -17,5 +18,5 @@ if [ "$1" == "one" ]; then
 fi;
 
 # Recursively list out all repositories under the current directory which are "dirty".
-# (unstaged changes, not on master, etc.)
+# (unstaged changes, not on master/main, etc.)
 each-child-repo.sh 'git-dirty one';

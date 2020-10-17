@@ -18,7 +18,6 @@
     ddiff = difftool --dir-diff
     cundo = reset --soft HEAD~1
     nuke = !git reset . && git checkout . && git clean -fd
-    fro = !git fetch -p origin && git rebase origin/master
     rtest = rebase --exec bin/test
     fp = push --force-with-lease
 [rebase]

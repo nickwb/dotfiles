@@ -1,0 +1,4 @@
+#!/usr/bin/sh
+
+MAIN_BRANCH=`git mbr`
+git fetch -p origin && git rebase origin/$MAIN_BRANCH

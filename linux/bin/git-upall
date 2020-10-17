@@ -4,8 +4,10 @@ if [ "$1" == "one" ]; then
     pwd;
 	git fetch --prune origin;
 	BRANCH=`git symbolic-ref --short -q HEAD`;
-	if [ "$BRANCH" == "master" ]; then
-		git merge origin/master --ff-only;
+	MAIN_BRANCH=`git mbr`;
+
+	if [ "$BRANCH" == "$MAIN_BRANCH" ]; then
+		git merge origin/$MAIN_BRANCH --ff-only;
 	else
 		echo "Won't update. Branch is $BRANCH";
 	fi;

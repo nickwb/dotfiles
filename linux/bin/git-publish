@@ -4,13 +4,14 @@
 # Will abort if you're on master. You should be publishing a feature branch.
 # Warns you if there are uncommitted changes - but does not abort.
 BRANCH=`git symbolic-ref --short -q HEAD`;
+MAIN_BRANCH=`git mbr`;
 
 if [ $? -ne 0 ]; then
     exit 1;
 fi;
 
-if [ "$BRANCH" == "master" ]; then
-    echo "You're on master. You shouldn't publish this.";
+if [ "$BRANCH" == "$MAIN_BRANCH" ]; then
+    echo "You're on $MAIN_BRANCH. You shouldn't publish this.";
     exit 1;
 fi;
 
