@@ -1,0 +1,6 @@
+#!/bin/sh
+
+echo "Assuming you meant 'git rebase' when you typed 'git rebae'..."
+echo ""
+
+git rebase $*
