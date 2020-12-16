@@ -1,0 +1,24 @@
+#!/usr/bin/bash
+
+find-up () {
+  path=$(pwd)
+  while [[ "$path" != "" ]]; do
+
+    if [[ -f "$path/shell.nix" ]]; then
+      echo "$path/shell.nix";
+      return;
+    fi
+
+    if [[ -f "$path/default.nix" ]]; then
+      echo "$path/default.nix";
+      return;
+    fi
+
+    path=${path%/*};
+  done
+  echo $(pwd);
+}
+
+NIX_FILE=`find-up`;
+echo "Launching nix: $NIX_FILE";
+nix-shell --command fish $NIX_FILE;
