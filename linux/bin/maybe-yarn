@@ -1,5 +1,10 @@
 #!/usr/bin/bash
 
+if ! which yarn; then
+    echo "maybe-yarn: Could not find yarn in your path";
+    exit 1;
+fi
+
 if [ -f "package.json" ]; then
     yarn $*;
 else
