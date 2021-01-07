@@ -1,0 +1,8 @@
+#!/usr/bin/bash
+
+if ! which gitg; then
+    echo "gg: Could not find gitg in your path";
+    exit 1;
+fi
+
+nohup gitg > /dev/null 2> /dev/null &
