@@ -1,5 +1,7 @@
 #! /usr/local/bin/fish
-if test -n "$HOME";
+if test -n "$HOME"
+    and test 1 -eq $NICK_USE_NIX;
+    
     # Set up the per-user profile.
     # This part should be kept in sync with nixpkgs:nixos/modules/programs/shell.nix
     set -xg NIX_LINK "$HOME/.nix-profile"

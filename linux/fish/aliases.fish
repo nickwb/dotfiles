@@ -1,6 +1,5 @@
 alias cat='bat --theme=OneHalfDark'
 alias ls='exa'
-alias dockaudio='$dotfiles_root/bin/set-xps-dock-audio.sh'
 alias fuu='killall -9 rider'
 alias fd='fdfind'
 alias fcd='cd (fd -t d | fzf)'
