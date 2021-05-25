@@ -19,20 +19,24 @@ if [[ -n "$DIR_GIT_STATUS" ]]; then
 	exit 1;
 fi;
 
-BRANCH=`git symbolic-ref --short -q HEAD`;
-MAIN_BRANCH=`git mbr`;
+TARGET_BRANCH=$1;
+if [[ -z "$TARGET_BRANCH" ]]; then
+	TARGET_BRANCH=`git mbr`;
+fi;
 
-if [ "$BRANCH" != "$MAIN_BRANCH" ]; then
+BRANCH=`git symbolic-ref --short -q HEAD`;
+
+if [ "$BRANCH" != "$TARGET_BRANCH" ]; then
 	echo "Pulling remote changes...";
 	git fetch --prune origin;
 	HEADREV=`git rev-parse HEAD`;
-	BASEREV=`git merge-base HEAD origin/$MAIN_BRANCH`;
+	BASEREV=`git merge-base HEAD origin/$TARGET_BRANCH`;
 
 	if [ "$HEADREV" == "$BASEREV" ]; then
-		echo "Great; $BRANCH is on $MAIN_BRANCH. Unwinding...";
+		echo "Great; $BRANCH is on $TARGET_BRANCH. Unwinding...";
 		CONTINUE=1;
 	else
-		echo "$BRANCH is ahead of $MAIN_BRANCH.";
+		echo "$BRANCH is ahead of $TARGET_BRANCH.";
 		CONTINUE=0;
 	fi;
 
@@ -42,19 +46,19 @@ if [ "$BRANCH" != "$MAIN_BRANCH" ]; then
 	fi;
 
 	if [ $CONTINUE -eq 1 ]; then
-		git checkout $MAIN_BRANCH;
-		git merge origin/$MAIN_BRANCH --ff-only;
+		git checkout $TARGET_BRANCH;
+		git merge origin/$TARGET_BRANCH --ff-only;
 		git branch -D $BRANCH;
 		echo ""
 		echo "Unwind complete. Deleted: $BRANCH."
 		echo "Here's what you missed:"
 		echo ""
-		git log --oneline $HEADREV~1..$MAIN_BRANCH
+		git log --oneline $HEADREV~1..$TARGET_BRANCH
 	else
 		echo "Aborting. You can force with gitunwind -f."
 	fi;
 else
-	echo "You're on $MAIN_BRANCH. Nothing to unwind!";
+	echo "You're on $TARGET_BRANCH. Nothing to unwind!";
 	echo "Will update instead.";
 	git pull --prune;
 fi;
