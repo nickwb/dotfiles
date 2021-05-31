@@ -15,7 +15,6 @@
     mt = mergetool
     dt = difftool
     ds = diff --shortstat
-    ddiff = difftool --dir-diff
     cundo = reset --soft HEAD~1
     nuke = !git reset . && git checkout . && git clean -fd
     rtest = rebase --exec bin/test
@@ -28,7 +27,7 @@
 [merge]
     tool = bc4
 [mergetool "bc4"]
-    cmd = "/usr/bin/bcompare" \"$LOCAL\" \"$REMOTE\" \"$BASE\" \"$MERGED\"
+    cmd = "bcompare-proxy" \"$LOCAL\" \"$REMOTE\" \"$BASE\" \"$MERGED\"
     trustExitCode = true
 [filter "lfs"]
     clean = git-lfs clean -- %f

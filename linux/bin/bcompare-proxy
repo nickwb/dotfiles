@@ -1,0 +1,30 @@
+#!/usr/bin/bash
+
+# Linux
+# /usr/bin/bcompare "$@"
+
+# WSL2
+BCOMP_PATH="/mnt/c/Program Files/Beyond Compare 4/BCompare.exe";
+
+LOCAL=""
+if [[ -n "$1" ]]; then
+	LOCAL=$(wslpath -aw $1);
+fi;
+
+REMOTE=""
+if [[ -n "$2" ]]; then
+	REMOTE=$(wslpath -aw $2);
+fi;
+
+BASE=""
+if [[ -n "$3" ]]; then
+	BASE=$(wslpath -aw $3);
+fi;
+
+MERGED=""
+if [[ -n "$4" ]]; then
+	MERGED=$(wslpath -aw $4);
+fi;
+
+#echo "$BCOMP_PATH" $LOCAL $REMOTE $BASE $MERGED;
+"$BCOMP_PATH" $LOCAL $REMOTE $BASE $MERGED;

@@ -1,0 +1,7 @@
+#!/usr/bin/bash
+
+# Linux
+# git difftool --dir-diff "$@"
+
+# WSL2
+git difftool -y -x bcompare-proxy --no-symlink --dir-diff "$@"
