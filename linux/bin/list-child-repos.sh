@@ -1,3 +1,3 @@
 #!/bin/sh
 
-fgr .
+fgr -s .

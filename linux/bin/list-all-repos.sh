@@ -1,3 +1,3 @@
 #!/bin/sh
 
-fgr $NICK_CODE_ROOT
+fgr -s $NICK_CODE_ROOT
