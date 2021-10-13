@@ -1,5 +1,5 @@
 set -xg dotfiles_root (realpath (dirname (status --current-filename))/../)
-set -xg PATH "$dotfiles_root/bin" "$HOME/.local/share/JetBrains/sh" "$HOME/.cargo/bin" $PATH
+set -xg PATH "$dotfiles_root/bin" "$HOME/.cargo/bin" $PATH
 
 starship init fish | source
 

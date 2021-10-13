@@ -1,4 +1,8 @@
-#!/usr/bin/sh
+#!/bin/env bash
 
-MAIN_BRANCH=`git mbr`
-git fetch -p origin && git rebase origin/$MAIN_BRANCH
+TARGET_BRANCH=$1;
+if [[ -z "$TARGET_BRANCH" ]]; then
+	TARGET_BRANCH=`git mbr`;
+fi;
+
+git fetch -p origin && git rebase origin/$TARGET_BRANCH
