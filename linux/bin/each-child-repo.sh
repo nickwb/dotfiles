@@ -1,7 +1,7 @@
 #!/bin/sh
 
 ORIGIN=`pwd`;
-REPOS=`list-all-repos.sh`;
+REPOS=`list-child-repos.sh`;
 COMMAND=$1;
 
 for d in $REPOS; do
