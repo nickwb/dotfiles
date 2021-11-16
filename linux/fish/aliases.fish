@@ -12,5 +12,5 @@ end
 
 # Map open to explorer on WSL2
 if which explorer.exe > /dev/null
-    alias open='explorer.exe'
+    alias open='wsl-open.sh'
 end

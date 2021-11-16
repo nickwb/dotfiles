@@ -1,4 +1,5 @@
 alias g='git'
+alias rr='cd $NICK_CODE_ROOT'
 
 function r
     if test -z "$argv";
