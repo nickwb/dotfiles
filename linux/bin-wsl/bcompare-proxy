@@ -26,5 +26,4 @@ if [[ -n "$4" ]]; then
 	MERGED=$(wslpath -aw $4);
 fi;
 
-#echo "$BCOMP_PATH" $LOCAL $REMOTE $BASE $MERGED;
 "$BCOMP_PATH" $LOCAL $REMOTE $BASE $MERGED;
