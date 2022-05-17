@@ -40,3 +40,14 @@ sudo apt-get update; \
   sudo apt-get update && \
   sudo apt-get install -y dotnet-sdk-6.0
 ```
+
+## `.wslconfig`
+
+There's a config file that sits in your windows File System: `C:\Users\YourUser\.wslconfig`
+
+```
+[wsl2]
+memory=16GB
+swap=0
+processors=6
+```
