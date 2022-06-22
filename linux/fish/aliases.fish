@@ -14,3 +14,14 @@ end
 if which explorer.exe > /dev/null
     alias open='wsl-open.sh'
 end
+
+# Don't use docker desktop kubectl
+if test -d "$HOME/.azure/bin"
+    # az aks install-cli --install-location ~/.azure/bin/kubectl --kubelogin-install-location ~/.azure/bin/kubelogin
+    alias kubectl="$HOME/.azure/bin/kubectl"
+    alias kubelogin="$HOME/.azure/bin/kubelogin"
+end
+
+function kubecd
+    kubectl config use-context (kubectl config get-contexts --output name | fzf)
+end
