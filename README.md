@@ -18,4 +18,5 @@
 - `postman`
 - `rg` (`ripgrep`)
 - `gh` (Github CLI)[https://cli.github.com/]
+- `sd`
 

@@ -23,5 +23,5 @@ if test -d "$HOME/.azure/bin"
 end
 
 function kubecd
-    kubectl config use-context (kubectl config get-contexts --output name | fzf)
+    kubectl config use-context (kubectl config get-contexts --output name | fzf --select-1 --exact --query "$argv")
 end
