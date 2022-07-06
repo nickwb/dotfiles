@@ -25,3 +25,15 @@ end
 function kubecd
     kubectl config use-context (kubectl config get-contexts --output name | fzf --select-1 --exact --query "$argv")
 end
+
+function azcd
+    # Get the list of subscriptions and present them in fzf
+    set which_sub (az account list --output tsv --query '[*].[id,name]' | fzf --select-1 --exact --query "$argv")
+    echo "Changing to: $which_sub"
+
+    # Extract just the subscription id
+    set which_sub (echo $which_sub | sd '^([\da-f\-]+).+$' '$1')
+
+    az account set --subscription $which_sub
+    az account show
+end
