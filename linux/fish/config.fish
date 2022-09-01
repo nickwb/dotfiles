@@ -1,5 +1,5 @@
 set -xg dotfiles_root (realpath (dirname (status --current-filename))/../)
-set -xg PATH "$dotfiles_root/bin" "$HOME/.cargo/bin" $PATH
+set -xg PATH "$dotfiles_root/bin" "$HOME/.cargo/bin" "$HOME/bin" $PATH
 
 if test 1 -eq $NICK_USE_WSL;
   set -xg PATH "$dotfiles_root/bin-wsl" $PATH
