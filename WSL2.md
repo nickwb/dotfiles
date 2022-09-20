@@ -25,7 +25,7 @@ There's a config file that sits in your windows File System: `C:\Users\YourUser\
 ```
 [wsl2]
 memory=16GB
-swap=0
+swap=8GB
 processors=6
 ```
 

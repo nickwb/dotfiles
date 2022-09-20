@@ -1,0 +1,11 @@
+#!/usr/bin/bash
+
+JETBRAINS_SCRIPT="/mnt/c/Users/NickYoung/AppData/Local/JetBrains/Toolbox/scripts/Rider.cmd"
+JETBRAINS_SCRIPT=$(wslpath -aw $JETBRAINS_SCRIPT)
+
+LAUNCH_PATH=$(wslpath -aw .)
+if [[ -n "$1" ]]; then
+	LAUNCH_PATH=$(wslpath -aw $1)
+fi;
+
+CMD.EXE /C "$JETBRAINS_SCRIPT" "$LAUNCH_PATH"
