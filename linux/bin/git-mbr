@@ -7,6 +7,7 @@ if [ $REF_SUCCESS -ne 0 ]; then
     >&2 echo "$PWD: Failed to determine main branch.";
     >&2 echo "You may need to set the head of the origin.";
     >&2 echo "try: git remote set-head origin main";
+    >&2 echo "or: git remote set-head origin master";
     exit $REF_SUCCESS;
 fi
 
