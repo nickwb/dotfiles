@@ -1,8 +1,19 @@
 set -xg dotfiles_root (realpath (dirname (status --current-filename))/../)
-set -xg PATH "$dotfiles_root/bin" "$HOME/.cargo/bin" "$HOME/bin" $PATH
 
-if test 1 -eq $NICK_USE_WSL;
-  set -xg PATH "$dotfiles_root/bin-wsl" $PATH
+function add_bin_dir_to_path
+    set maybe_path $argv[1]
+    if test -d $maybe_path
+        set -xg PATH $maybe_path $PATH
+    end
+end
+
+add_bin_dir_to_path "$dotfiles_root/bin"
+add_bin_dir_to_path "$HOME/.cargo/bin"
+add_bin_dir_to_path "$HOME/bin"
+add_bin_dir_to_path "$HOME/.dotnet/tools"
+
+if test 1 -eq $NICK_USE_WSL
+    add_bin_dir_to_path "$dotfiles_root/bin-wsl"
 end
 
 starship init fish | source
