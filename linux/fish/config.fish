@@ -10,7 +10,6 @@ end
 add_bin_dir_to_path "$dotfiles_root/bin"
 add_bin_dir_to_path "$HOME/.cargo/bin"
 add_bin_dir_to_path "$HOME/bin"
-add_bin_dir_to_path "$HOME/.dotnet/tools"
 
 if test 1 -eq $NICK_USE_WSL
     add_bin_dir_to_path "$dotfiles_root/bin-wsl"
@@ -20,4 +19,5 @@ starship init fish | source
 
 source $dotfiles_root/fish/git.fish
 source $dotfiles_root/fish/aliases.fish
+source $dotfiles_root/fish/dotnet.fish
 source $dotfiles_root/fish/nix.fish
