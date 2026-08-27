@@ -10,6 +10,8 @@ end
 add_bin_dir_to_path "$dotfiles_root/bin"
 add_bin_dir_to_path "$HOME/.cargo/bin"
 add_bin_dir_to_path "$HOME/bin"
+add_bin_dir_to_path "$HOME/.local/bin"
+add_bin_dir_to_path "$HOME/go/bin"
 
 if test 1 -eq $NICK_USE_WSL
     add_bin_dir_to_path "$dotfiles_root/bin-wsl"
