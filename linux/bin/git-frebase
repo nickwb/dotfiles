@@ -1,0 +1,537 @@
+#!/usr/bin/bash
+
+# "Fast rebase".
+#
+# Runs `git rebase` inside a cached mirror clone on a fast filesystem, then syncs the
+# result back into this repository.
+#
+# It exists because rebases in repositories checked out on the Windows partition
+# (/mnt/c, reached over 9p) abort partway through claiming there are uncommitted changes
+# when the working tree is clean. 9p serves git a stale attribute cache, so the index
+# refresh sees the previous rebase step's file state. See docs/frebase-design.md.
+#
+# All arguments are forwarded to `git rebase` untouched, except frebase's own verbs:
+#   git frebase --finish     sync back a paused rebase that has since completed
+#   git frebase --abort      abort the paused rebase and discard it
+#   git frebase --status     report in-progress state for this repository
+#   git frebase --clean      remove cache directories
+#
+# If the repository already lives on the cache's filesystem there is nothing to gain, so
+# frebase execs straight through to `git rebase`. Set GIT_FREBASE_FORCE=1 to override.
+#
+# A rebase with nothing to do is the common case for `git fro`. When the arguments are a
+# single bare commit-ish, frebase settles that from the object database and exits without
+# building a cache. See nothing_to_do.
+
+CACHE_ROOT="${GIT_FREBASE_CACHE_ROOT:-/tmp/git-frebase}";
+
+die() {
+    >&2 echo "$1";
+    exit $2;
+}
+
+# --clean is global and needs no repository, so it is handled before anything else.
+do_clean() {
+    if [ ! -d "$CACHE_ROOT" ]; then
+        echo "No frebase caches under $CACHE_ROOT.";
+        return 0;
+    fi;
+
+    local FOUND=0;
+
+    for D in "$CACHE_ROOT"/*/; do
+        [ -d "$D" ] || continue;
+        FOUND=1;
+
+        if [ -e "$D/.git/frebase-state" ]; then
+            echo "Skipping, a frebase is in progress: $D";
+            continue;
+        fi;
+
+        echo "Removing: $D";
+        rm -rf "$D";
+    done;
+
+    if [ $FOUND -eq 0 ]; then
+        echo "No frebase caches under $CACHE_ROOT.";
+    fi;
+
+    return 0;
+}
+
+if [ "$1" == "--clean" ]; then
+    do_clean;
+    exit 0;
+fi;
+
+TOPLEVEL=`git rev-parse --show-toplevel 2>/dev/null`;
+
+if [ $? -ne 0 ] || [ -z "$TOPLEVEL" ]; then
+    die "Not a git repository." 1;
+fi;
+
+# Resolve the real git dir rather than assuming $TOPLEVEL/.git, so that worktrees and
+# separate-gitdir checkouts still work.
+GITDIR=`cd "$TOPLEVEL" && cd "$(git rev-parse --git-common-dir)" && pwd`;
+
+cache_dir() {
+    local ID=`printf '%s' "$TOPLEVEL" | sha1sum | cut -c1-8`;
+    echo "$CACHE_ROOT/$(basename "$TOPLEVEL")-$ID";
+}
+
+CACHE=`cache_dir`;
+STATE="$CACHE/.git/frebase-state";
+
+# Would relocating the work change filesystem at all? Compare device ids rather than
+# filesystem names: it answers exactly that question, and needs only coreutils.
+same_filesystem() {
+    mkdir -m 700 -p "$CACHE_ROOT" 2>/dev/null;
+    local A=`stat -c %d "$TOPLEVEL" 2>/dev/null`;
+    local B=`stat -c %d "$CACHE_ROOT" 2>/dev/null`;
+    [ -n "$A" ] && [ "$A" == "$B" ];
+}
+
+if [ -z "$GIT_FREBASE_FORCE" ] && same_filesystem; then
+    case "$1" in
+        --finish|--status)
+            echo "frebase is not engaged for $TOPLEVEL: it is already on the cache filesystem.";
+            exit 0;
+            ;;
+    esac;
+    # exec, so exit status, signals and TTY behaviour are identical to a bare git rebase.
+    exec git rebase "$@";
+fi;
+
+# working_tree_dirty, rebase_in_progress, read_state, assert_safe_to_sync and sync_back are
+# defined here rather than at their "natural" spots further down in the pre-flight, cache and
+# sync-back sections. This script executes top to bottom, and bash only registers a
+# function's body when its `name() { ... }` statement actually runs — a call to a function
+# whose definition is still further down the file, unexecuted, fails with "command not
+# found" even though the call is textually inside an earlier-defined function. --status,
+# --finish and --abort dispatch (and exit) before the script would otherwise reach those
+# later sections, so the five definitions moved up here. Everything that used to call them
+# (the dirty-tree check in pre-flight, ensure_cache/refresh_cache's use of rebase_in_progress,
+# sync_back's own call site at the bottom) is untouched and still works: a function
+# definition has no effect until called, so relocating it earlier changes nothing about
+# when its logic actually runs for the ordinary rebase path.
+
+# `git status --porcelain` reports tracked modifications and untracked files. Only tracked
+# modifications block a rebase, so ask for those specifically.
+working_tree_dirty() {
+    [ -n "`git status --porcelain --untracked-files=no`" ];
+}
+
+rebase_in_progress() {
+    [ -d "$CACHE/.git/rebase-merge" ] || [ -d "$CACHE/.git/rebase-apply" ];
+}
+
+read_state() {
+    BRANCH=`git config -f "$STATE" --get frebase.branch`;
+    OLD=`git config -f "$STATE" --get frebase.old`;
+    local STORED_TOPLEVEL=`git config -f "$STATE" --get frebase.toplevel`;
+
+    if [ -n "$STORED_TOPLEVEL" ] && [ "$STORED_TOPLEVEL" != "$TOPLEVEL" ]; then
+        >&2 echo "Warning: the frebase state at $STATE was written for '$STORED_TOPLEVEL', not '$TOPLEVEL'.";
+    fi;
+
+    [ -n "$BRANCH" ] && [ -n "$OLD" ];
+}
+
+# Every sync-back site must confirm three things are still true, not just the two do_finish
+# used to check: the source repo is still on $BRANCH, its working tree is still clean, and
+# -- the guard this function adds -- the cache is still on $BRANCH too. sync_back does
+# `git reset -q --hard` on the SOURCE repository's real checkout, and a paused rebase can
+# leave a human sitting in an editor pointed at that checkout for as long as they like: they
+# can edit files, switch branches, or (inside the cache) check out something else entirely
+# before exiting. None of that moves $BRANCH itself, so the update-ref guard in sync_back
+# would not catch it. Exits (and so leaves $STATE in place) rather than returning, so a
+# caller can never forget to check its result.
+assert_safe_to_sync() {
+    local CURRENT=`git symbolic-ref --short -q HEAD`;
+
+    if [ "$CURRENT" != "$BRANCH" ]; then
+        die "This frebase is for '$BRANCH' but you are on '$CURRENT'. Check out $BRANCH first." 3;
+    fi;
+
+    if working_tree_dirty; then
+        git update-index --really-refresh >/dev/null 2>&1;
+
+        if working_tree_dirty; then
+            >&2 echo "You have uncommitted changes or a dirty working tree. Aborting.";
+            git status -s;
+            exit 2;
+        fi;
+    fi;
+
+    local CACHE_HEAD=`git -C "$CACHE" symbolic-ref --short -q HEAD`;
+
+    if [ "$CACHE_HEAD" != "$BRANCH" ]; then
+        die "The frebase cache at $CACHE is now on '${CACHE_HEAD:-a detached HEAD}', not '$BRANCH'. Refusing to sync back." 3;
+    fi;
+}
+
+sync_back() {
+    local NEW=`git -C "$CACHE" rev-parse HEAD`;
+
+    if [ "$NEW" == "$OLD" ]; then
+        echo "Nothing to sync: the rebase produced no change.";
+        rm -f "$STATE";
+        return 0;
+    fi;
+
+    # Checkpoint before anything moves. Per docs/git.md these are local-only and are meant
+    # to be deleted once the result looks right.
+    local BACKUP="backup/frebase-$BRANCH-`date +%Y%m%d-%H%M%S`";
+
+    if ! git branch "$BACKUP" "$OLD"; then
+        >&2 echo "Failed to create backup branch $BACKUP. Nothing was changed.";
+        return 5;
+    fi;
+
+    # unpackLimit=1 forces one packfile instead of many loose-object creates, which on 9p
+    # is many round trips each.
+    if ! git -c fetch.unpackLimit=1 fetch -q "$CACHE" HEAD; then
+        >&2 echo "Failed to fetch the rebase result from $CACHE. Nothing was changed on $BRANCH.";
+        >&2 echo "Backup branch: $BACKUP";
+        return 5;
+    fi;
+
+    if ! git update-ref "refs/heads/$BRANCH" "$NEW" "$OLD" 2>/dev/null; then
+        >&2 echo "$BRANCH moved since the rebase started. Refusing to overwrite it.";
+        >&2 echo "The rebase result is $NEW, in $CACHE.";
+        >&2 echo "Backup branch: $BACKUP";
+        return 5;
+    fi;
+
+    git reset -q --hard;
+
+    # Settle. `reset --hard` writes each file then immediately lstats it to record stat
+    # data in the index; if 9p serves a stale attribute in that window git records the
+    # wrong data and the tree reads dirty forever after. Force a re-stat.
+    git update-index --really-refresh >/dev/null 2>&1;
+
+    if working_tree_dirty; then
+        git update-index --really-refresh >/dev/null 2>&1;
+    fi;
+
+    rm -f "$STATE";
+
+    echo "";
+    echo "frebase complete. $BRANCH is now at `git rev-parse --short HEAD`.";
+    echo "Backup branch: $BACKUP";
+    echo "  Delete it once you're happy: git branch -D $BACKUP";
+
+    if working_tree_dirty; then
+        >&2 echo "";
+        >&2 echo "WARNING: the working tree still reports modified files after a stat refresh:";
+        git status -s;
+    fi;
+
+    return 0;
+}
+
+do_status() {
+    if [ ! -e "$STATE" ]; then
+        echo "No frebase in progress for $TOPLEVEL.";
+        return 0;
+    fi;
+
+    # Use read_state rather than re-deriving fields with separate `git config -f` calls, so
+    # a malformed state file is reported as unreadable here too, instead of --status printing
+    # blank fields and confidently claiming the rebase is complete.
+    if ! read_state; then
+        echo "frebase state exists for $TOPLEVEL but $STATE is unreadable.";
+        echo "  Use 'git frebase --abort' to discard it.";
+        return 0;
+    fi;
+
+    local STARTED=`git config -f "$STATE" --get frebase.started`;
+
+    echo "frebase in progress for $TOPLEVEL";
+    echo "  branch:  $BRANCH";
+    echo "  from:    $OLD";
+    echo "  started: $STARTED";
+    echo "  cache:   $CACHE";
+
+    if rebase_in_progress; then
+        echo "  state:   rebase paused - resolve it in the cache, then 'git frebase --finish'";
+    else
+        echo "  state:   rebase complete - run 'git frebase --finish'";
+    fi;
+
+    return 0;
+}
+
+do_finish() {
+    [ -e "$STATE" ] || die "No frebase in progress for this repository." 3;
+    read_state || die "The frebase state file at $STATE is unreadable. Use 'git frebase --abort'." 3;
+
+    if rebase_in_progress; then
+        die "The rebase in $CACHE is still in progress. Resolve it there first." 3;
+    fi;
+
+    assert_safe_to_sync;
+    sync_back;
+    return $?;
+}
+
+do_abort() {
+    [ -e "$STATE" ] || die "No frebase in progress for this repository." 3;
+    git -C "$CACHE" rebase --abort >/dev/null 2>&1;
+    git -C "$CACHE" reset -q --hard >/dev/null 2>&1;
+    git -C "$CACHE" clean -qfd >/dev/null 2>&1;
+    rm -f "$STATE";
+    # --abort deliberately works on a detached HEAD too, so use --abbrev-ref, which yields
+    # "HEAD" rather than an empty string in that case.
+    echo "frebase aborted. `git rev-parse --abbrev-ref HEAD` is unchanged at `git rev-parse --short HEAD`.";
+    return 0;
+}
+
+case "$1" in
+    --status)
+        do_status;
+        exit $?;
+        ;;
+    --finish)
+        do_finish;
+        exit $?;
+        ;;
+    --abort)
+        do_abort;
+        exit $?;
+        ;;
+esac;
+
+if [ -n "$GIT_FREBASE" ]; then
+    die "You are already inside a frebase shell for '$GIT_FREBASE'. Finish that rebase first." 3;
+fi;
+
+BRANCH=`git symbolic-ref --short -q HEAD`;
+
+if [ $? -ne 0 ] || [ -z "$BRANCH" ]; then
+    die "HEAD is detached. frebase needs a branch to move. Check one out first." 4;
+fi;
+
+OLD=`git rev-parse HEAD`;
+
+if working_tree_dirty; then
+    # The dirty report may itself be the stale-attribute-cache bug this command exists to
+    # dodge. Force a re-stat and ask once more before giving up: it is the cheapest place
+    # in the whole flow to defeat it.
+    git update-index --really-refresh >/dev/null 2>&1;
+
+    if working_tree_dirty; then
+        >&2 echo "You have uncommitted changes or a dirty working tree. Aborting.";
+        git status -s;
+        exit 2;
+    fi;
+
+    echo "(Working tree reported dirty; a stat refresh cleared it. Continuing.)";
+fi;
+
+if [ -e "$STATE" ]; then
+    die "A frebase is already in progress for this repository. Use 'git frebase --finish' or 'git frebase --abort'." 3;
+fi;
+
+# A rebase with nothing to do is the common case for `git fro`, and the mechanism below is
+# pure overhead when it happens: the cache refresh and a second working-tree scan, to
+# discover that HEAD never moved. Answer the question here instead, from the object database
+# alone, and exit as `git rebase` would.
+#
+# Only attempted for a single bare commit-ish -- the `git fro` shape. Anything with an
+# option, a second positional argument, or no argument at all goes the long way: bare
+# `git rebase` defaults to --fork-point, whose result depends on the upstream ref's reflog
+# and cannot be predicted from ancestry.
+#
+# Defined immediately before its call site for the reason given in the comment above
+# working_tree_dirty.
+nothing_to_do() {
+    [ $# -eq 1 ] || return 1;
+    case "$1" in -*) return 1;; esac;
+
+    local U;
+    # An unresolvable ref is not "nothing to do" -- let `git rebase` issue its own error.
+    U=`git rev-parse -q --verify "$1^{commit}"` || return 1;
+
+    # Fast-forwardable: the upstream is already contained in this branch.
+    git merge-base --is-ancestor "$U" "$OLD" || return 1;
+
+    # And linear. Ancestry alone is not enough: a branch with the upstream merged into it is
+    # fast-forwardable, yet `git rebase` still has work to do -- it drops the merge commit and
+    # replays the branch flat. git's own can_fast_forward() pairs its merge-base test with an
+    # is_linear_history() walk for exactly this reason. Skipping here would silently leave a
+    # merge commit on a branch bound for a repository that requires linear history.
+    [ "`git rev-list --count --min-parents=2 "$U..$OLD"`" == "0" ] || return 1;
+
+    # And carries nothing for --autosquash to rearrange. git 2.43 ignores rebase.autosquash
+    # outside an interactive rebase, so this is insurance rather than a live concern -- but
+    # git 2.45 taught --autosquash to work without -i, and deciding "nothing to do" for
+    # ourselves would then stop squashing fixups silently. Whether they get squashed is git's
+    # call; one cheap walk of the same range keeps it that way.
+    ! git log --format=%s "$U..$OLD" | grep -qE "^(fixup|squash|amend)! ";
+}
+
+if nothing_to_do "$@"; then
+    echo "Current branch $BRANCH is up to date.";
+    exit 0;
+fi;
+
+# Build a throwaway repository on the fast filesystem whose refs mirror this one exactly.
+# Only creates/validates/rebuilds the directory itself -- the source .git/config is copied
+# (and its fixups reapplied) on every run by refresh_cache, not just here, so config changes
+# made after the cache was first built are not silently stale. See refresh_cache.
+ensure_cache() {
+    if [ -d "$CACHE/.git" ]; then
+        local URL=`git -C "$CACHE" config --get remote.slow.url 2>/dev/null`;
+        local FETCH=`git -C "$CACHE" config --get remote.slow.fetch 2>/dev/null`;
+
+        if [ "$URL" == "$TOPLEVEL" ] && [ "$FETCH" == "+refs/*:refs/*" ]; then
+            return 0;
+        fi;
+
+        rm -rf "$CACHE";
+    fi;
+
+    mkdir -m 700 -p "`dirname "$CACHE"`" || return 1;
+    git init -q "$CACHE" || return 1;
+}
+
+refresh_cache() {
+    # The source .git/config is copied wholesale on purpose, and re-copied here on every
+    # invocation rather than once at build time. That inherits the origin URL, every
+    # branch.<name>.* tracking entry, rebase.autosquash, and the mergetool wiring, so
+    # origin/master, @{upstream} and `git mergetool` all behave the same as they do here. It
+    # also carries core.filemode and core.ignorecase, without which the rebase would see
+    # spurious mode changes. Doing this every run (not just at cache build) matters: a
+    # branch created after the cache was built would otherwise have no branch.<name>.merge in
+    # the cache, and a retargeted upstream would leave the cache's stale copy in place, so the
+    # rebase would silently land on the wrong upstream instead of failing loudly.
+    cp "$GITDIR/config" "$CACHE/.git/config" || return 1;
+    git -C "$CACHE" config --unset core.worktree 2>/dev/null;
+    git -C "$CACHE" config --unset core.bare 2>/dev/null;
+    git -C "$CACHE" config core.bare false;
+
+    # Deliberately NOT `git remote add`. That installs a default
+    # +refs/heads/*:refs/remotes/slow/* refspec which, combined with prune and the mirror
+    # refspec below, makes every fetch emit "cannot lock ref ... unable to resolve
+    # reference". Set the three keys directly instead. Reapplied every run because the `cp`
+    # above just overwrote the whole config file, wiping these out along with gc.auto.
+    git -C "$CACHE" config remote.slow.url "$TOPLEVEL";
+    git -C "$CACHE" config remote.slow.fetch '+refs/*:refs/*';
+    git -C "$CACHE" config remote.slow.prune true;
+    git -C "$CACHE" config gc.auto 0;
+
+    # Guarantee a clean slate: a previous run may have left a half-finished rebase or a
+    # dirty tree behind if the shell was killed.
+    git -C "$CACHE" rebase --abort >/dev/null 2>&1;
+    git -C "$CACHE" reset -q --hard >/dev/null 2>&1;
+    git -C "$CACHE" clean -qfd >/dev/null 2>&1;
+
+    # Point HEAD outside refs/heads/* so the fetch can update all branch refs without
+    # colliding with an unborn HEAD or a checked-out branch. The mirror fetch will succeed
+    # even if the source contains refs/frebase/cache-head, because git's "refusing to fetch
+    # into branch" guard only applies to refs/heads/*.
+    git -C "$CACHE" symbolic-ref HEAD refs/frebase/cache-head || return 1;
+
+    git -C "$CACHE" fetch -q slow || return 1;
+
+    # Check out a branch of the same name rather than a detached HEAD, so the inherited
+    # branch.<name>.remote/.merge config applies and a bare `git frebase` with no upstream
+    # argument still resolves the right upstream.
+    git -C "$CACHE" checkout -q -B "$BRANCH" "$OLD" || return 1;
+
+    # checkout -B ran from an unborn HEAD (refs/frebase/cache-head never exists), so it had
+    # no tree to diff against and left behind index entries and files that $OLD does not
+    # contain. Now that HEAD is born, force the tree to match $OLD exactly.
+    git -C "$CACHE" reset -q --hard "$OLD" || return 1;
+    git -C "$CACHE" clean -qfd;
+}
+
+ensure_cache || die "Failed to build the frebase cache at $CACHE. Try 'git frebase --clean' and retry." 3;
+refresh_cache || die "Failed to refresh the frebase cache from $TOPLEVEL. Try 'git frebase --clean' and retry." 3;
+
+# Test hook: lets the cache be inspected without running a rebase.
+if [ -n "$GIT_FREBASE_STOP_AFTER_CACHE" ]; then
+    exit 0;
+fi;
+
+# State is written with `git config -f` so it can be read back without eval, and lives
+# under .git/ so it is not an untracked file in the cache's working tree.
+write_state() {
+    git config -f "$STATE" frebase.toplevel "$TOPLEVEL";
+    git config -f "$STATE" frebase.branch "$BRANCH";
+    git config -f "$STATE" frebase.old "$OLD";
+    git config -f "$STATE" frebase.started "`date -Is`";
+}
+
+write_state;
+
+git -C "$CACHE" rebase "$@";
+REBASE_RC=$?;
+
+if [ $REBASE_RC -eq 0 ] && ! rebase_in_progress; then
+    assert_safe_to_sync;
+    sync_back;
+    exit $?;
+fi;
+
+# The rebase stopped: a conflict, an `edit`/`break` in an interactive todo list, or a
+# failed --exec. The state file is already on disk from write_state.
+
+if ! rebase_in_progress; then
+    # It failed without starting: a bad upstream, an unknown option. Nothing to resume.
+    rm -f "$STATE";
+    exit $REBASE_RC;
+fi;
+
+# Require both stdin and stdout to be interactive: stdout so the banners and editor are
+# visible, stdin because that is what feeds the spawned shell. This fails toward exit 6
+# in ambiguous cases (e.g. piped stdout at a terminal), which is safer than spawning a
+# doomed subshell.
+if [ ! -t 0 ] || [ ! -t 1 ]; then
+    >&2 echo "";
+    >&2 echo "The rebase has paused, and there is no terminal to continue it in.";
+    >&2 echo "  cd $CACHE";
+    >&2 echo "  ...resolve, then: git rebase --continue";
+    >&2 echo "  finally, from $TOPLEVEL: git frebase --finish";
+    >&2 echo "To give up instead: git frebase --abort";
+    exit 6;
+fi;
+
+echo "";
+echo "The rebase has paused in the frebase cache.";
+echo "  You are about to drop into a shell in $CACHE.";
+echo "  Resolve it there, then exit the shell and frebase will sync the result back.";
+echo "  To give up: git rebase --abort, then exit.";
+echo "";
+
+(
+    cd "$CACHE" || exit 1;
+    # GIT_FREBASE signals nesting; GIT_FREBASE_REPO is available for prompt segments to
+    # show which repository the subshell belongs to.
+    GIT_FREBASE="$BRANCH" GIT_FREBASE_REPO="$TOPLEVEL" "${SHELL:-/bin/bash}";
+);
+
+if rebase_in_progress; then
+    echo "";
+    echo "The rebase is still in progress in $CACHE.";
+    echo "  Resume it there, then run: git frebase --finish";
+    echo "  Or give up with: git frebase --abort";
+    exit 0;
+fi;
+
+NEW=`git -C "$CACHE" rev-parse HEAD`;
+
+if [ "$NEW" == "$OLD" ]; then
+    echo "";
+    echo "The rebase was abandoned. $BRANCH is unchanged at ${OLD:0:8}.";
+    rm -f "$STATE";
+    exit 0;
+fi;
+
+# The subshell stayed open for as long as it took a human to resolve the rebase, sitting in
+# an editor pointed at $TOPLEVEL the whole time. Confirm nothing moved out from under us
+# before sync_back resets that checkout hard.
+assert_safe_to_sync;
+sync_back;
+exit $?;

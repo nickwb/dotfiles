@@ -5,4 +5,8 @@ if [[ -z "$TARGET_BRANCH" ]]; then
 	TARGET_BRANCH=`git mbr`;
 fi;
 
-git fetch -p origin && git rebase origin/$TARGET_BRANCH
+# Rebases go through git-frebase, which runs them on a fast filesystem when this
+# repository lives on /mnt/c and passes straight through when it does not. The fetch stays
+# here: frebase does no fetching of its own, and running it first means frebase's mirror
+# fetch picks up the refreshed refs/remotes/origin/*.
+git fetch -p origin && git frebase origin/$TARGET_BRANCH
