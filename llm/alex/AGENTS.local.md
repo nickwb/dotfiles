@@ -15,6 +15,7 @@ There is a symlink from `/mnt/c/Users/NickYoung/code/linuxfs` to `/home/nickwb/c
 ## Git
 
 Don't add Co-authored-by trailers to commits.
+This user usually prefers to make commits and raise pull requests themselves. Don't do them unless you've been asked explicitly. If creating a commit or raising a pull request is a necessary step in your process, then ask for permission before doing so.
 
 ## Running Node and npm on this machine
 
