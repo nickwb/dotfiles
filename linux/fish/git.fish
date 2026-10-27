@@ -1,19 +1,13 @@
 alias g='git'
 alias rr='cd $NICK_CODE_ROOT'
 
-# fzf-git-repos.sh forwards its arguments with an unquoted $*, so an empty
-# --query would be dropped and fzf would complain. Only pass one when we have it.
-function _fzf_query_args
-    if test -z "$argv"
-        return
-    end
-    echo --query
-    echo "$argv"
-end
-
 function r
-    set -l selected (list-all-repos.sh | fzf-git-repos.sh --select-1 --exact (_fzf_query_args $argv))
-    test -n "$selected"; and cd $selected
+    set -l selected (list-all-repos.sh | fzf-git-repos.sh --select-1 --exact --query "$argv")
+    if test -z "$selected"
+        echo "No repository selected" >&2
+        return 1
+    end
+    cd $selected
 end
 
 function wt
@@ -22,6 +16,10 @@ function wt
         return 1
     end
 
-    set -l selected (list-worktrees.sh | fzf-git-repos.sh --select-1 --exact (_fzf_query_args $argv))
-    test -n "$selected"; and cd $selected
+    set -l selected (list-worktrees.sh | fzf-git-repos.sh --select-1 --exact --query "$argv")
+    if test -z "$selected"
+        echo "No worktree selected" >&2
+        return 1
+    end
+    cd $selected
 end
