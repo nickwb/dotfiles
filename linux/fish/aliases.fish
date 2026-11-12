@@ -1,7 +1,15 @@
 alias cat='bat --theme=OneHalfDark'
 alias ls='exa'
 alias fuu='killall -9 rider'
-alias fcd='cd (fd -t d | fzf)'
+function fcd
+    set -l selected (fd -t d | fzf --select-1 --exact --query "$argv")
+    if test -z "$selected"
+        echo "No directory selected" >&2
+        return 1
+    end
+    cd $selected
+end
+
 alias top='procs --watch --sortd cpu'
 alias y='maybe-yarn'
 
