@@ -1,0 +1,81 @@
+#!/usr/bin/bash
+
+# Remove a stale index.lock, left behind when a git process crashed or was killed.
+# The lock is stale when:
+#   - no process has the lock file open,
+#   - no git process is running inside this repository, and
+#   - the lock is older than MIN_AGE_SECONDS.
+# The age check covers git processes that /proc cannot show, such as git.exe on the Windows
+# side of WSL. Use -f to skip the age check. The process checks always apply.
+
+set -euo pipefail;
+
+MIN_AGE_SECONDS=60;
+
+DO_FORCE=0;
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -f|--force)
+      DO_FORCE=1;
+      shift;
+      ;;
+    *)
+      echo "Unknown option $1";
+      exit 3;
+      ;;
+  esac
+done
+
+# --git-path finds the index of the current worktree, which is not under .git in a linked worktree.
+LOCK=$(git rev-parse --path-format=absolute --git-path index.lock) || exit 1;
+
+if [[ ! -e "$LOCK" ]]; then
+    echo "No lock at $LOCK. Nothing to do.";
+    exit 0;
+fi;
+
+LOCK_AGE=$(( $(date +%s) - $(stat -c %Y "$LOCK") ));
+echo "Found $LOCK, last modified ${LOCK_AGE}s ago.";
+
+STALE=1;
+
+# find fails on the /proc entries of other users, and of processes that exit during the search.
+HOLDERS=$(find /proc/[0-9]*/fd -lname "$LOCK" 2>/dev/null | cut -d/ -f3 | sort -u || true);
+
+for PID in $HOLDERS; do
+    echo "Process $PID has the lock open: $(tr '\0' ' ' < "/proc/$PID/cmdline" 2>/dev/null)";
+    STALE=0;
+done
+
+# Some git commands, such as `git commit -a` while the editor is open, close the lock file but
+# keep it in place. Treat any git process inside the repository as the possible owner.
+GIT_DIR=$(git rev-parse --path-format=absolute --git-common-dir);
+TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null || true);
+
+for PID in $(pgrep -x git || true); do
+    CWD=$(readlink "/proc/$PID/cwd" 2>/dev/null) || continue;
+
+    if [[ "$CWD/" == "$GIT_DIR/"* || ( -n "$TOPLEVEL" && "$CWD/" == "$TOPLEVEL/"* ) ]]; then
+        echo "git is running in this repository (PID $PID): $(tr '\0' ' ' < "/proc/$PID/cmdline" 2>/dev/null)";
+        STALE=0;
+    fi;
+done
+
+if [[ $STALE -eq 0 ]]; then
+    echo "The lock is in use. Aborting.";
+    exit 4;
+fi;
+
+if [[ $LOCK_AGE -lt $MIN_AGE_SECONDS ]]; then
+    if [[ $DO_FORCE -eq 1 ]]; then
+        echo "The lock is younger than ${MIN_AGE_SECONDS}s. Continuing anyway, as -f was specified.";
+    else
+        echo "The lock is younger than ${MIN_AGE_SECONDS}s, so it might still be in use. Aborting.";
+        echo "You can force with git unlock -f.";
+        exit 5;
+    fi;
+fi;
+
+rm -- "$LOCK" || exit 6;
+echo "Deleted stale lock: $LOCK";
