@@ -11,6 +11,7 @@ There is a symlink from `/mnt/c/Users/NickYoung/code/linuxfs` to `/home/nickwb/c
 - `fd` (Aliased as `fd` from the `fish` shell, available as `fdfind` everywhere).
 - `jq` - For manipulating JSON
 - `gh` - The Github CLI
+- `start-docker` - Docker Desktop runs on Windows, and `docker` only works in WSL while it is running. If `docker` fails to connect, run `start-docker`. It starts Docker Desktop if needed, and exits with code 0 once `docker` is available. It is safe to run `start-docker` if docker is already running. The script waits up to 2 minutes, then exits with code 1. A cold start usually takes about 15 seconds.
 
 ## Git
 

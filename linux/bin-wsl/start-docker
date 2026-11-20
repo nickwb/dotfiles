@@ -1,0 +1,51 @@
+#!/usr/bin/bash
+
+# Start Docker Desktop on the Windows host, and wait until docker is available in WSL.
+# Exits at once if docker is already available.
+
+set -uo pipefail;
+
+DOCKER_DESKTOP='C:\Program Files\Docker\Docker\Docker Desktop.exe';
+POLL_SECONDS=3;
+MAX_WAIT_SECONDS=120;
+
+# /proc/uptime is monotonic, unlike the WSL wall clock, which can jump.
+uptime_seconds() {
+    local UPTIME;
+    read -r UPTIME _ < /proc/uptime;
+    echo "${UPTIME%.*}";
+}
+
+docker_is_available() {
+    # docker ps can hang while the engine starts, so limit each attempt.
+    timeout 10 docker ps >/dev/null 2>&1;
+}
+
+if docker_is_available; then
+    echo "Docker is already available.";
+    exit 0;
+fi;
+
+echo "Starting Docker Desktop...";
+
+# `start` makes cmd.exe return without waiting for Docker Desktop.
+# cmd.exe cannot use a WSL directory as its working directory, so run it from /mnt/c.
+(cd /mnt/c && setsid cmd.exe /c start "" "$DOCKER_DESKTOP" </dev/null >/dev/null 2>&1) &
+disown;
+
+START=$(uptime_seconds);
+DEADLINE=$(( START + MAX_WAIT_SECONDS ));
+
+while (( $(uptime_seconds) < DEADLINE )); do
+    sleep $POLL_SECONDS;
+
+    if docker_is_available; then
+        echo "Docker is available.";
+        exit 0;
+    fi;
+
+    echo "Waiting for docker... ($(( $(uptime_seconds) - START ))s)";
+done
+
+echo "Docker is not available after ${MAX_WAIT_SECONDS}s. Giving up.";
+exit 1;
